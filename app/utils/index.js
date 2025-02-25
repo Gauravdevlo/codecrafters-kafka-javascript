@@ -3,6 +3,7 @@ export const pick = (obj, ...args) => ({
   ...args.reduce((res, key) => ({ ...res, [key]: obj[key] }), {}),
 });
 export const sendResponseMessage = (connection, messageObj) => {
+  // console.log(messageObj, connection)
   return connection.write(Buffer.concat(Object.values(messageObj)));
 };
 export const apiVersioningResponseFields = (version) => {
