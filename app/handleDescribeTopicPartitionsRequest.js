@@ -25,6 +25,7 @@ export const parseDescribeTopicPartitionsRequest = (data, offset) => {
     offset += 1;
     const topicName = data.subarray(offset, offset + topicNameLength);
     offset += topicNameLength;
+    offset += 1; // tag buffer
     topics.push(topicName);
   }
   return topics;
@@ -32,21 +33,22 @@ export const parseDescribeTopicPartitionsRequest = (data, offset) => {
 /**
  *
  * @param {Buffer[]} topics
+ * @returns {Buffer[]}
  */
 export const handleDescribeTopicPartitionsRequest = (topics) => {
   const logFile = fs.readFileSync(LOG_FILE_PATH);
-  const topicNameIndex = logFile.indexOf(topics[0]);
-  let topicResponse;
-  if (topicNameIndex !== -1) {
-    topicResponse = getTopicResponse(topics[0], topicNameIndex, logFile);
-  } else {
-    topicResponse = getUnknownTopicResponse(topics[0]);
-  }
+  const topicResponse = topics.map((topicName) => {
+    const topicNameIndex = logFile.indexOf(topicName);
+    if (topicNameIndex === -1) {
+      return getUnknownTopicResponse(topicName);
+    }
+    return getTopicResponse(topicName, topicNameIndex, logFile);
+  });
   let body = [
     EMPTY_TAG_BUFFER, // tagBuffer
     bufferFromInt32BE(0), //throttleTime
     Buffer.from([topics.length + 1]), // topicsArrayLength
-    ...topicResponse,
+    ...topicResponse.flat(1),
     Buffer.alloc(1).fill(0xff), // nextCursor
     EMPTY_TAG_BUFFER, // tagBuffer
   ];
@@ -82,12 +84,8 @@ const getTopicResponse = (topicName, topicNameIndex, logFile) => {
   let remainingLogFile = logFile.subarray(
     topicNameIndex + topicName.length + 16
   );
-  console.log("XX");
   let indexOfPartition = remainingLogFile.indexOf(topicUUID);
   let partitions = [];
-  console.log(
-    remainingLogFile.subarray(indexOfPartition, indexOfPartition + 100)
-  );
   while (indexOfPartition !== -1) {
     let offset = indexOfPartition;
     const errorCode = bufferFromInt16BE(TOPIC_ERROR_CODES.NO_ERROR);
