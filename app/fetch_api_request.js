@@ -85,10 +85,34 @@ export const handleFetchApiRequest = (connection, responseMessage, buffer) => {
   };
   sendResponseMessage(connection, fetchRequestResponse);
 };
-const readFromFileBuffer = (topicName, partitionIndex) => {
-  const topicFile = fs.readFileSync(
-    `/tmp/kraft-combined-logs/${topicName}-${partitionIndex.readInt32BE()}/00000000000000000000.log`,
-  );
-  console.log(topicFile);
-  return Buffer.concat([Buffer.from([2]), topicFile]);
-};
+function readFromFileBuffer(topicName, partitionIndex, offset = 0, batchSize = 10) {
+    try {
+        const logFilePath = `/tmp/kraft-combined-logs/${topicName}-${partitionIndex}/00000000000000000000.log`;
+
+        if (!fs.existsSync(logFilePath)) {
+            throw new Error(`Log file not found: ${logFilePath}`);
+        }
+
+        const logFile = fs.readFileSync(logFilePath); // Read entire file
+        let messages = [];
+        let index = offset;
+
+        while (messages.length < batchSize && index < logFile.length) {
+            if (index + 4 > logFile.length) break; // Avoid out-of-bounds error
+
+            const messageSize = logFile.readInt32BE(index); // Read message size (4 bytes)
+            index += 4;
+
+            if (index + messageSize > logFile.length) break; // Ensure valid message size
+
+            const messageData = logFile.slice(index, index + messageSize); // Extract message
+            messages.push(messageData.toString()); // Convert buffer to string
+            index += messageSize; // Move to next message
+        }
+
+        return { messages, nextOffset: index }; // Return messages & next offset for pagination
+    } catch (error) {
+        console.error("Error reading log file:", error);
+        return { messages: [], nextOffset: offset };
+    }
+}
