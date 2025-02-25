@@ -24,10 +24,13 @@ export const handleFetchApiRequest = (connection, responseMessage, buffer) => {
         const logFile = fs.readFileSync(
           `/tmp/kraft-combined-logs/__cluster_metadata-0/00000000000000000000.log`,
         );
-        const partitionError =
-          logFile.indexOf(topicId) === -1
-            ? Buffer.from([0, 100])
-            : Buffer.from([0, 0]);
+        const logFileIndex = logFile.indexOf(topicId);
+        let partitionError = Buffer.from([0, 100]);
+        let topicName = "";
+        if (logFileIndex !== -1) {
+          partitionError = Buffer.from([0, 0]);
+          topicName = logFile.subarray(logFileIndex - 3, logFileIndex);
+        }
         const partitionArrayIndex = topicIndex;
         const partitionLength = buffer.subarray(
           partitionArrayIndex,
@@ -42,7 +45,11 @@ export const handleFetchApiRequest = (connection, responseMessage, buffer) => {
         const log_start_offset = Buffer.from(new Array(8).fill(0));
         const aborted_transactions = Buffer.from([0]);
         const preferredReadReplica = Buffer.from([0, 0, 0, 0]);
-        const records = Buffer.from([0]);
+        const recordBatch =
+          logFileIndex === -1
+            ? Buffer.from([0])
+            : readFromFileBuffer(topicName.toString(), partitionIndex);
+        console.log("recordBatch", recordBatch);
         const partitionArrayBuffer = Buffer.concat([
           partitionLength,
           partitionIndex,
@@ -52,7 +59,7 @@ export const handleFetchApiRequest = (connection, responseMessage, buffer) => {
           log_start_offset,
           aborted_transactions,
           preferredReadReplica,
-          records,
+          recordBatch,
           tagBuffer,
         ]);
         return Buffer.concat([topicId, partitionArrayBuffer, tagBuffer]);
@@ -77,4 +84,11 @@ export const handleFetchApiRequest = (connection, responseMessage, buffer) => {
     ...fetchRequestResponse,
   };
   sendResponseMessage(connection, fetchRequestResponse);
+};
+const readFromFileBuffer = (topicName, partitionIndex) => {
+  const topicFile = fs.readFileSync(
+    `/tmp/kraft-combined-logs/${topicName}-${partitionIndex.readInt32BE()}/00000000000000000000.log`,
+  );
+  console.log(topicFile);
+  return Buffer.concat([Buffer.from([2]), topicFile]);
 };
